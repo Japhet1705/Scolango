@@ -1,0 +1,51 @@
+# ─── Scolango — Docker Compose pour développement ou VPS ──────────────────────
+# Usage dev :   docker compose up
+# Usage prod :  docker compose -f docker-compose.yml up -d
+
+version: '3.9'
+
+services:
+  # ─── Base de données PostgreSQL ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: scolango_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scolango_db
+      POSTGRES_USER: scolango
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_en_production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"     # Exposer uniquement en dev ; commenter en prod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scolango -d scolango_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Application Scolango ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: scolango_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://scolango:${POSTGRES_PASSWORD:-changeme_en_production}@postgres:5432/scolango_db
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads    # Dossier pour les logos uploadés
+
+volumes:
+  postgres_data:
+    name: scolango_postgres_data

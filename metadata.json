@@ -1,0 +1,6 @@
+{
+  "name": "Scolango",
+  "description": "Système complet de gestion et d’information scolaire (Établissements scolaires, élèves, professeurs, notes, absences, bulletins pdf, IA).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

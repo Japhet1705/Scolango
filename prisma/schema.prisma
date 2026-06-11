@@ -1,0 +1,371 @@
+// ────────────────────────────────────────────────────────────────────────────
+//  SCOLANGO — Schéma Prisma (PostgreSQL)
+//  Commandes utiles :
+//    npx prisma migrate dev --name init   → créer les tables en dev
+//    npx prisma migrate deploy            → appliquer en production
+//    npx prisma studio                    → explorer les données
+// ────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enumérations ────────────────────────────────────────────────────────────
+
+enum Role {
+  admin
+  directeur
+  secretaire
+  enseignant
+  eleve
+  parent
+  comptable
+}
+
+enum Niveau {
+  primaire
+  college
+  lycee
+  universite
+}
+
+enum TypeNote {
+  devoir
+  composition
+  tp
+  examen
+}
+
+enum StatutPresence {
+  present
+  absent
+  retard
+}
+
+enum Jour {
+  Lundi
+  Mardi
+  Mercredi
+  Jeudi
+  Vendredi
+  Samedi
+}
+
+enum ModePaiement {
+  Wave
+  OrangeMoney
+  MTN
+  Especes
+  Cheque
+  Virement
+}
+
+enum TypePaiement {
+  inscription
+  scolarite
+  autre
+}
+
+enum StatutEleve {
+  actif
+  abandon
+}
+
+// ─── Utilisateurs ────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String    // bcrypt hash
+  nom           String
+  prenom        String
+  role          Role
+  phone         String?
+  photo         String?
+  adresse       String?
+  active        Boolean   @default(true)
+  specialty     String?   // Pour les enseignants
+  ecoleId       String
+
+  // Relations
+  ecole              Ecole             @relation(fields: [ecoleId], references: [id])
+  classesPrincipales Classe[]           @relation("ProfPrincipal")
+  matieres           Matiere[]          @relation("EnseignantMatiere")
+  creneaux           CreneauHoraire[]
+  auditLogs          AuditLog[]
+  paiementsEncaisses Paiement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Classes ─────────────────────────────────────────────────────────────────
+
+model Classe {
+  id             String   @id @default(cuid())
+  nom            String
+  niveau         Niveau
+
+  profPrincipal  User?    @relation("ProfPrincipal", fields: [profPrincipalId], references: [id])
+  profPrincipalId String?
+  ecoleId        String
+
+  // Relations
+  ecole          Ecole              @relation(fields: [ecoleId], references: [id])
+  eleves         Eleve[]
+  matieres       Matiere[]
+  creneaux       CreneauHoraire[]
+  presences      Presence[]
+  fraisScolaires FraisScolaires?
+  notes          Note[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Matières ────────────────────────────────────────────────────────────────
+
+model Matiere {
+  id          String  @id @default(cuid())
+  nom         String
+  coefficient Float
+
+  classe      Classe  @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  classeId    String
+  ecoleId     String
+
+  enseignant  User?   @relation("EnseignantMatiere", fields: [enseignantId], references: [id])
+  enseignantId String?
+  ecole       Ecole   @relation(fields: [ecoleId], references: [id])
+
+  // Relations
+  notes    Note[]
+  creneaux CreneauHoraire[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Élèves ──────────────────────────────────────────────────────────────────
+
+model Eleve {
+  id             String      @id @default(cuid())
+  matricule      String      @unique
+  nom            String
+  prenom         String
+  sexe           String      // "M" | "F"
+  dateNaissance  String
+  adresse        String
+  telephone      String?
+  parentNom      String?
+  parentContact  String?
+  photo          String?
+  remise         Float?
+  statut         StatutEleve @default(actif)
+  motifAbandon   String?
+
+  classe         Classe      @relation(fields: [classeId], references: [id])
+  classeId       String
+  ecoleId        String
+  ecole          Ecole       @relation(fields: [ecoleId], references: [id])
+
+  // Relations
+  notes    Note[]
+  presences Presence[]
+  paiements Paiement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Examens / Sessions ───────────────────────────────────────────────────────
+
+model Examen {
+  id         String   @id @default(cuid())
+  nom        String
+  periode    String
+  dateDebut  String
+  dateFin    String
+  actif      Boolean  @default(false)
+  ecoleId    String
+  ecole      Ecole   @relation(fields: [ecoleId], references: [id])
+
+  notes Note[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Notes ───────────────────────────────────────────────────────────────────
+
+model Note {
+  id         String   @id @default(cuid())
+  valeur     Float
+  type       TypeNote
+  dateSaisie String
+
+  eleve      Eleve   @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+  eleveId    String
+
+  matiere    Matiere @relation(fields: [matiereId], references: [id], onDelete: Cascade)
+  matiereId  String
+
+  classe     Classe  @relation(fields: [classeId], references: [id])
+  classeId   String
+
+  examen     Examen  @relation(fields: [examenId], references: [id])
+  examenId   String
+  ecoleId    String
+  ecole      Ecole   @relation(fields: [ecoleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Présences ────────────────────────────────────────────────────────────────
+
+model Presence {
+  id       String         @id @default(cuid())
+  date     String
+  statut   StatutPresence
+  motif    String?
+  justifie Boolean        @default(false)
+
+  eleve    Eleve  @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+  eleveId  String
+
+  classe   Classe @relation(fields: [classeId], references: [id])
+  classeId String
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Emploi du temps ─────────────────────────────────────────────────────────
+
+model CreneauHoraire {
+  id          String @id @default(cuid())
+  jour        Jour
+  heureDebut  String
+  heureFin    String
+  salle       String?
+
+  classe      Classe  @relation(fields: [classeId], references: [id])
+  classeId    String
+
+  matiere     Matiere @relation(fields: [matiereId], references: [id])
+  matiereId   String
+
+  enseignant  User    @relation(fields: [enseignantId], references: [id])
+  enseignantId String
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Années scolaires ────────────────────────────────────────────────────────
+
+model AnneeScolaire {
+  id       String  @id @default(cuid())
+  libelle  String  @unique
+  active   Boolean @default(false)
+  archivee Boolean @default(false)
+  ecoleId  String
+  ecole    Ecole   @relation(fields: [ecoleId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Paramètres école ────────────────────────────────────────────────────────
+
+model ParametresEcole {
+  id                    String  @id @default(cuid())
+  nomEtablissement      String
+  logoUrl               String?
+  logoBlob              String? @db.Text
+  adresse               String  @default("")
+  devise                String  @default("XOF")
+  themePrincipal        String  @default("orange")
+  activeAnneeScolaireId String  @default("")
+  statutEtablissement   String? // "public" | "prive"
+  emailEtablissement    String?
+  telEtablissement      String?
+  smtpHost              String?
+  smtpUser              String?
+  smsGateway            String?
+  decoupageAcademique   String? // "trimestre" | "semestre"
+  dateLimiteSaisie      String?
+  ecoleId               String  @unique
+  ecole                 Ecole   @relation(fields: [ecoleId], references: [id])
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Frais scolaires ─────────────────────────────────────────────────────────
+
+model FraisScolaires {
+  id                 String @id @default(cuid())
+  montantScolarite   Float
+  montantInscription Float
+
+  classe   Classe @relation(fields: [classeId], references: [id])
+  classeId String @unique
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Paiements ───────────────────────────────────────────────────────────────
+
+model Paiement {
+  id            String       @id @default(cuid())
+  montant       Float
+  type          TypePaiement
+  datePaiement  String
+  modePaiement  ModePaiement
+  recuNumero    String       @unique
+  notes         String?
+
+  eleve         Eleve  @relation(fields: [eleveId], references: [id])
+  eleveId       String
+
+  caissier      User   @relation(fields: [caissierId], references: [id])
+  caissierId    String
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Audit log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id              String @id @default(cuid())
+  timestamp       DateTime @default(now())
+  utilisateurNom  String
+  role            Role
+  action          String
+  details         String @db.Text
+
+  user   User?  @relation(fields: [userId], references: [id])
+  userId String?
+}
+
+model Ecole {
+  id            String    @id @default(cuid())
+  nom           String
+  slug          String    @unique
+  adresse       String?
+  email         String?
+  telephone     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  users         User[]
+  classes       Classe[]
+  matieres      Matiere[]
+  eleves        Eleve[]
+  examens       Examen[]
+  anneesScolaires AnneeScolaire[]
+  parametres    ParametresEcole[]
+}

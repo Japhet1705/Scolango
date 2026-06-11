@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────
+#  SCOLANGO — Déploiement Render.com
+#  Connectez ce fichier à votre repo GitHub depuis Render
+# ─────────────────────────────────────────────────────────
+
+services:
+  # ── Application Node.js principale ─────────────────────
+  - type: web
+    name: scolango
+    env: node
+    region: oregon          # Changez selon votre région
+    plan: starter           # free | starter | standard
+    buildCommand: npm ci && npm run build && npx prisma generate
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: scolango-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false           # À saisir manuellement dans le dashboard Render
+      - key: JWT_SECRET
+        generateValue: true   # Render génère automatiquement une valeur sécurisée
+      - key: JWT_EXPIRES_IN
+        value: "8h"
+      - key: DEMO_MODE
+        value: "false"        # Désactiver les quick-logins en production
+      - key: APP_URL
+        fromService:
+          name: scolango
+          type: web
+          property: url
+
+  # ── Base de données PostgreSQL ──────────────────────────
+databases:
+  - name: scolango-db
+    plan: free               # free | standard | plus
+    region: oregon
+    databaseName: scolango
+    user: scolango
